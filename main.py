@@ -2,56 +2,75 @@ import socketserver
 import socket
 import threading
 import time
+import json
+from pprint import pprint
+from pymongo import MongoClient
+from datetime import datetime
+
+
+client = MongoClient('mongodb://root:mongo0928@localhost:27017')
+'''db_user = client.chat_user
+collection_user_info = db_user.user_info'''
+
+db_chat = client.chat_room
+collection_chat_room = db_chat.chat_record
+
+
+def update(latest_time):
+    struct_time = time.strptime(latest_time, '%Y-%m-%d %H:%M:%S')
+    tstamp = int(time.mktime(struct_time))
+    result = list(collection_chat_room.aggregate([
+        {
+            "$match":{"chatroom.record.time":{"$lt":tstamp}}
+        }
+    ]))
+    js_str = json.dumps(result[0]['chatroom']['record'])
+    print(js_str)
+    return js_str.encode("utf-8")
+
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         connection = self.request
+        who = connection.getpeername()
         cur_thread = threading.current_thread()
         print(cur_thread)
+        print(who)
         while True:
-            data = connection.recv(1024).decode()
+            data = str(connection.recv(1024).decode("utf-8"))
+            print(f"receive from user {who}:{data}".encode("utf-8"))
+            response = ""
             if data == "quit":
                 print("client quit")
                 break
-            self.request.sendall(data.encode())
-            print(f"recevice from user:{data}")
+            if data.startswith("latest"):
+                latest_time = str(data.split(",")[1]).strip()
+                response = update(latest_time)
+                response = bytes(response)
+                self.request.sendall(response)
+            
+            self.request.sendall(f"get you {data}".encode("utf-8"))
 
+    
+    
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
-    #allow_reuse_address = True
-
-def client(ip, port, message):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((ip, port))
-    try:
-        sock.sendall(message)
-        response = sock.recv(1024)
-        print("Received: {}".format(response))
-    finally:
-        sock.close()
-
 
 if __name__ == "__main__":
-    binding = ("", 9999)
+    try:
+        binding = ("0.0.0.0", 8051)
+        server = ThreadedTCPServer(binding, ThreadedTCPRequestHandler)
+        server_thread = threading.Thread(target=server.serve_forever)
 
-    server = ThreadedTCPServer(binding, ThreadedTCPRequestHandler)
-    #ip, port = server.server_address
-
-    # Start a thread with the server -- that thread will then start one
-    # more thread for each request
-    server_thread = threading.Thread(target=server.serve_forever)
-    server_thread.start()
-    # Exit the server thread when the main thread terminates
-    '''server_thread.daemon = True
-    server_thread.start()'''
-    while True:
+        server_thread.start()
+        print("Server loop running in thread:", server_thread.name)
+    
+    except KeyboardInterrupt:
+        server.shutdown()
+    
+    '''while True:
         for i in threading.enumerate():
             print(i)
-        time.sleep(5)
-    #print("Server loop running in thread:", server_thread.name)
-
-    #client(ip, port, "Hello World 1".encode())
-    #client(ip, port, "Hello World 2".encode())
-    #client(ip, port, "Hello World 3".encode())
+        time.sleep(5)'''
 
     #server.shutdown()
