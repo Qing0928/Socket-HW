@@ -1,17 +1,13 @@
 import socketserver
-import socket
 import sys
 import threading
 import time
 import json
-from pprint import pprint
 from pymongo import MongoClient
 from datetime import datetime
 
 
 client = MongoClient('mongodb://root:mongo0928@localhost:27017')
-'''db_user = client.chat_user
-collection_user_info = db_user.user_info'''
 
 db_chat = client.chat_room
 collection_chat_room = db_chat.chat_record
@@ -72,12 +68,9 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
         connection = self.request
         ip, port = connection.getpeername()
         cur_thread = threading.current_thread()
-        print(cur_thread)
-        print(ip)
         connect_detail = f"{ip}:{port}"
         while True:
             data = str(connection.recv(1024).decode("utf-8"))
-            print(f"receive from user {ip}:{data}".encode("utf-8"))
             response = ""
 
             if data == "quit":
@@ -93,10 +86,10 @@ class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
                 msg_content = str(data.split("new,")[1]).strip()
                 new_msg(msg_content, connect_detail)
                 self.request.sendall(b"receive new msg \n")
-                print("send success")
 
             elif data.startswith("first"):
                 response = first_use()
+                response = bytes(response)
                 self.request.sendall(response)
 
             self.request.sendall(b"\n")
